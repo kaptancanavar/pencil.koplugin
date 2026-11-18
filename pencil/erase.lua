@@ -338,11 +338,20 @@ function Pencil:eraseAtPoint(x, y, page)
                         i, min_x, max_x, min_y, max_y, x, y, eraser_width))
                 end
                 local pieces, hit
+                -- The points are the stroke's centre line, but its ink
+                -- reaches half the drawn width beyond them. Measuring
+                -- against the bare eraser radius missed thick strokes
+                -- (highlighter, marker, fountain pen) that the eraser
+                -- visibly touched, and a partial cut left a stub of ink of
+                -- half the stroke width inside the eraser circle.
+                local half_w = math.floor(strokeDrawWidth(stroke) / 2)
+                local reach_r = eraser_width + half_w
                 -- Cheap reject first: eraser circle far from the stroke's box
+                -- (the box already includes the stroke's half width)
                 local bx, by, bw, bh = strokeBBox(stroke)
                 local near = bx and x >= bx - eraser_width and x <= bx + bw + eraser_width
                     and y >= by - eraser_width and y <= by + bh + eraser_width
-                if near and self:isPointNearStroke(x, y, stroke, eraser_width) then
+                if near and self:isPointNearStroke(x, y, stroke, reach_r) then
                     hit = true
                     if self.partial_eraser then
                         -- Partial erase: keep the parts of the stroke outside
@@ -351,7 +360,7 @@ function Pencil:eraseAtPoint(x, y, page)
                         -- (otherwise the stroke would be "deleted" and re-added
                         -- unchanged, polluting undo).
                         local cut
-                        pieces, cut = self:splitStrokeAtPoint(stroke, x, y, eraser_width)
+                        pieces, cut = self:splitStrokeAtPoint(stroke, x, y, reach_r)
                         hit = cut
                     end
                 end
@@ -362,7 +371,7 @@ function Pencil:eraseAtPoint(x, y, page)
                     -- partial cut (the rest of the stroke is unchanged), the
                     -- whole stroke otherwise.
                     if pieces then
-                        local reach = eraser_width + math.floor(strokeDrawWidth(stroke) / 2) + 4
+                        local reach = reach_r + half_w + 4
                         self:addEraseArea(x - reach, y - reach, x + reach, y + reach)
                     else
                         local sx, sy, sw, sh = strokeBBox(stroke)
