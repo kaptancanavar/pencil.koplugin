@@ -105,7 +105,9 @@ end
 -- Called after a stroke is finalized and inserted into self.strokes.
 -- @param stroke_idx number  index of the stroke in self.strokes
 -- @param skip_bookmark boolean  if true, skip bookmark sync (used during bootstrap)
-function Pencil:assignStrokeToGroup(stroke_idx, skip_bookmark)
+-- @param skip_sig boolean  if true, leave group.sig to the caller (bulk
+--        regrouping computes it once per group afterwards, not per stroke)
+function Pencil:assignStrokeToGroup(stroke_idx, skip_bookmark, skip_sig)
     local stroke = self.strokes[stroke_idx]
     if not stroke then return end
 
@@ -143,7 +145,7 @@ function Pencil:assignStrokeToGroup(stroke_idx, skip_bookmark)
             end
         end
         best_group.tool = hl_count > pen_count and TOOL_HIGHLIGHTER or TOOL_PEN
-        best_group.sig = self:groupSignature(best_group)
+        if not skip_sig then best_group.sig = self:groupSignature(best_group) end
         if not skip_bookmark then
             self:markGroupDirty(best_group)
             -- A merged stroke invalidates the previously captured image (bbox
@@ -178,7 +180,7 @@ function Pencil:assignStrokeToGroup(stroke_idx, skip_bookmark)
                 group.xpointer_v2 = true
             end
         end
-        group.sig = self:groupSignature(group)
+        if not skip_sig then group.sig = self:groupSignature(group) end
         table.insert(self.annotation_groups, group)
         if not skip_bookmark then
             self:markGroupDirty(group)
@@ -191,17 +193,21 @@ end
 -- A rebuild uses it to recognize groups whose strokes didn't change, so they
 -- keep their id, captured image and XPointer. Anchored strokes use their page
 -- coordinates: their screen points change with every scroll.
+-- O(1) per stroke: time, tool, width, point count and end points. Every edit
+-- that reaches a rebuild (partial erase, lasso move, undo) changes at least
+-- one of them. Summing all points made this O(points) and, as it runs on
+-- every pen lift, writing got slower the fuller the page was.
 function Pencil:groupSignature(group)
     local keys = {}
     for _, idx in ipairs(group.stroke_indices or {}) do
         local stroke = self.strokes[idx]
         local pts = stroke and ((stroke.anchor and stroke.dpts) or stroke.points)
-        if pts and #pts > 0 then
-            local sum = 0
-            for _, pt in ipairs(pts) do sum = sum + pt.x + pt.y end
-            keys[#keys + 1] = string.format("%s:%s:%s:%d:%.2f,%.2f:%.2f,%.2f:%.2f",
-                tostring(stroke.datetime), tostring(stroke.tool), tostring(stroke.width), #pts,
-                pts[1].x, pts[1].y, pts[#pts].x, pts[#pts].y, sum)
+        local n = pts and #pts or 0
+        if n > 0 then
+            local a, b = pts[1], pts[n]
+            keys[#keys + 1] = string.format("%s:%s:%s:%d:%.2f,%.2f:%.2f,%.2f",
+                tostring(stroke.datetime), tostring(stroke.tool), tostring(stroke.width), n,
+                a.x, a.y, b.x, b.y)
         end
     end
     table.sort(keys)
@@ -244,7 +250,10 @@ function Pencil:rebuildAnnotationGroups()
 
         -- Re-assign each stroke
         for _, entry in ipairs(sorted) do
-            self:assignStrokeToGroup(entry.idx)
+            self:assignStrokeToGroup(entry.idx, nil, true)
+        end
+        for _, group in ipairs(self.annotation_groups) do
+            group.sig = self:groupSignature(group)
         end
 
         -- Groups whose strokes are unchanged keep their identity: the image

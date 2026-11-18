@@ -134,7 +134,10 @@ function Pencil:loadStrokes()
             end
             table.sort(sorted, function(a, b) return a.dt < b.dt end)
             for _, entry in ipairs(sorted) do
-                self:assignStrokeToGroup(entry.idx, true)
+                self:assignStrokeToGroup(entry.idx, true, true)
+            end
+            for _, group in ipairs(self.annotation_groups) do
+                group.sig = self:groupSignature(group)
             end
         end
 
