@@ -488,7 +488,8 @@ function Pencil:purgeAllImages()
         group.image_rotation = nil
     end
     self:saveStrokes()
-    UIManager:setDirty(self.view, "ui")
+    -- self.view is not on the UI stack: repaint the reader window itself
+    UIManager:setDirty(self.ui.dialog or self.ui, "ui")
 end
 
 -- Re-capture missing images for groups on the currently visible page.

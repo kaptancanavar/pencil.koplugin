@@ -367,14 +367,22 @@ function Pencil:clearAllStrokes()
         self:cancelGroupImageCapture(group.id)
         self:removeGroupImage(group)
     end
+    local deleted = self.strokes
     self.strokes = {}
-    self.page_strokes = {}
+    self.lasso_selection = nil
+    self:rebuildPageIndex()
     self.annotation_groups = {}
+    if #deleted > 0 then
+        -- Undoable like any other deletion. Without an entry, undo went on
+        -- with the older history and brought back previously erased strokes.
+        self:pushUndo({ type = "delete", strokes = deleted })
+    end
     self:saveStrokes()
     -- Belt-and-suspenders: any leftover files get reaped.
     self:purgeOrphanImages()
 
-    UIManager:setDirty(self.view, "ui")
+    -- self.view is not on the UI stack: repaint the reader window itself
+    UIManager:setDirty(self.ui.dialog or self.ui, "ui")
 end
 
 return Pencil

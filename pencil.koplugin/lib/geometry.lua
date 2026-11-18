@@ -86,10 +86,16 @@ function Geometry.densifyPoints(points, step)
         local k = math.floor(dist / step)
         for j = 1, k do
             local t = j / (k + 1)
-            out[#out + 1] = {
+            local pt = {
                 x = math.floor(a.x + dx * t + 0.5),
                 y = math.floor(a.y + dy * t + 0.5),
             }
+            -- Pressure (fountain pen, pencil) is interpolated too; without it
+            -- the renderer falls back to 0.5 and the whole stroke changes look
+            if a.p and b.p then
+                pt.p = math.floor((a.p + (b.p - a.p) * t) * 100 + 0.5) / 100
+            end
+            out[#out + 1] = pt
         end
         out[#out + 1] = b
     end

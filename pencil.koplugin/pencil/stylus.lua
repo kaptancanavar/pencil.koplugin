@@ -52,8 +52,8 @@ function Pencil:resetTransientInput(keep_pen)
         pcall(self.endRawStroke, self)
     end
 end
--- Setup stylus callback for lowest latency pen capture
 
+-- Setup stylus callback for lowest latency pen capture
 -- Uses the new Input:registerStylusCallback() API that intercepts stylus events
 -- before they reach the gesture detector
 function Pencil:setupStylusCallback()

@@ -77,8 +77,11 @@ function Pencil:addRawPoint(x, y)
         half_w = math.floor(width * MARKER_FACTOR / 2) + 2
     end
 
-    -- Reinvert color in night mode (if it's not black or gray)
-    if Screen.night_mode and self.current_stroke.color_name ~= "Black" and self.current_stroke.color_name ~= "Gray" then
+    -- Reinvert color in night mode (if it's not black or gray). Not for the
+    -- highlighter: renderStroke draws it uninverted, like KOReader's own
+    -- highlights, and the live preview must match or it changes on settle.
+    if Screen.night_mode and self.current_stroke.tool ~= TOOL_HIGHLIGHTER
+            and self.current_stroke.color_name ~= "Black" and self.current_stroke.color_name ~= "Gray" then
         color = color:invert()
     end
 

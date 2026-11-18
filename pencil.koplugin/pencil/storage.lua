@@ -117,6 +117,11 @@ function Pencil:loadStrokes()
         -- refer to strokes by index, so after skipping any they're rebuilt.
         if skipped == 0 and type(data.annotation_groups) == "table" and #data.annotation_groups > 0 then
             self.annotation_groups = data.annotation_groups
+            -- Indices are valid right now: (re)compute the fingerprints that
+            -- let a later rebuild keep unchanged groups (files before it lack them)
+            for _, group in ipairs(self.annotation_groups) do
+                group.sig = self:groupSignature(group)
+            end
             logger.info("Pencil: loaded", #self.annotation_groups, "annotation groups")
         else
             -- v1 data or no groups — bootstrap by running grouping on all strokes

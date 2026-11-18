@@ -13,6 +13,7 @@ local Common = require("pencil/common")
 local TOOL_PEN = Common.TOOL_PEN
 local TOOL_HIGHLIGHTER = Common.TOOL_HIGHLIGHTER
 local TOOL_ERASER = Common.TOOL_ERASER
+local PEN_TYPE_PEN = Common.PEN_TYPE_PEN
 
 local Pencil = {}
 
@@ -415,16 +416,25 @@ function Pencil:onDrawTap(ges)
         points = { { x = ges.pos.x, y = ges.pos.y } },
         width = tool_settings.width,
         color = tool_settings.color,
+        color_name = tool_settings.color_name,
         alpha = tool_settings.alpha,
         datetime = os.time(),
     }
+    -- Same fields as a stroke from raw input (see startRawStroke): without
+    -- color_name the dot lost its color on reload and vanished in night mode
+    local pen_type = tool_settings.pen_type
+    if effective_tool == TOOL_PEN and pen_type and pen_type ~= PEN_TYPE_PEN then
+        stroke.pen_type = pen_type
+    end
 
+    self:anchorIfScroll(stroke)
     table.insert(self.strokes, stroke)
-    self:indexStroke(#self.strokes, page)
+    self:indexStroke(#self.strokes, stroke.page)
     self:saveStrokes()
 
     -- Add to undo stack
     self:pushUndo({ type = "add", stroke_idx = #self.strokes })
+    self:assignStrokeToGroup(#self.strokes)
 
     -- Draw directly to screen buffer
     self:renderStroke(Screen.bb, stroke)

@@ -143,6 +143,7 @@ function Pencil:assignStrokeToGroup(stroke_idx, skip_bookmark)
             end
         end
         best_group.tool = hl_count > pen_count and TOOL_HIGHLIGHTER or TOOL_PEN
+        best_group.sig = self:groupSignature(best_group)
         if not skip_bookmark then
             self:markGroupDirty(best_group)
             -- A merged stroke invalidates the previously captured image (bbox
@@ -177,12 +178,34 @@ function Pencil:assignStrokeToGroup(stroke_idx, skip_bookmark)
                 group.xpointer_v2 = true
             end
         end
+        group.sig = self:groupSignature(group)
         table.insert(self.annotation_groups, group)
         if not skip_bookmark then
             self:markGroupDirty(group)
             self:scheduleGroupImageCapture(group)
         end
     end
+end
+
+-- Content fingerprint of a group's strokes, independent of their indices.
+-- A rebuild uses it to recognize groups whose strokes didn't change, so they
+-- keep their id, captured image and XPointer. Anchored strokes use their page
+-- coordinates: their screen points change with every scroll.
+function Pencil:groupSignature(group)
+    local keys = {}
+    for _, idx in ipairs(group.stroke_indices or {}) do
+        local stroke = self.strokes[idx]
+        local pts = stroke and ((stroke.anchor and stroke.dpts) or stroke.points)
+        if pts and #pts > 0 then
+            local sum = 0
+            for _, pt in ipairs(pts) do sum = sum + pt.x + pt.y end
+            keys[#keys + 1] = string.format("%s:%s:%s:%d:%.2f,%.2f:%.2f,%.2f:%.2f",
+                tostring(stroke.datetime), tostring(stroke.tool), tostring(stroke.width), #pts,
+                pts[1].x, pts[1].y, pts[#pts].x, pts[#pts].y, sum)
+        end
+    end
+    table.sort(keys)
+    return table.concat(keys, ";")
 end
 
 -- Mark a group as needing a bookmark sync on the next deferred-work flush.
@@ -199,23 +222,57 @@ function Pencil:rebuildAnnotationGroups()
     local ok, err = pcall(function()
         -- Remove all existing bookmarks for pencil groups, and cancel any
         -- pending image captures (group ids will change).
+        local old_by_sig = {}
         for _, group in ipairs(self.annotation_groups) do
             self:removeGroupBookmark(group)
             self:cancelGroupImageCapture(group.id)
+            if group.sig then old_by_sig[group.sig] = group end
         end
 
         self.annotation_groups = {}
 
-        -- Build list of {index, datetime} sorted by datetime
+        -- Build list of {index, datetime} sorted by datetime. Ties keep
+        -- stroke order, so unchanged strokes regroup the same way every time.
         local sorted = {}
         for i, stroke in ipairs(self.strokes) do
             table.insert(sorted, { idx = i, dt = stroke.datetime or 0 })
         end
-        table.sort(sorted, function(a, b) return a.dt < b.dt end)
+        table.sort(sorted, function(a, b)
+            if a.dt ~= b.dt then return a.dt < b.dt end
+            return a.idx < b.idx
+        end)
 
         -- Re-assign each stroke
         for _, entry in ipairs(sorted) do
             self:assignStrokeToGroup(entry.idx)
+        end
+
+        -- Groups whose strokes are unchanged keep their identity: the image
+        -- (on every page, not just the visible one) and the XPointer.
+        local kept = {}
+        for _, group in ipairs(self.annotation_groups) do
+            local old = group.sig and old_by_sig[group.sig]
+            if old then
+                old_by_sig[group.sig] = nil
+                self:cancelGroupImageCapture(group.id)
+                group.id = old.id
+                group.image_path, group.image_rotation = old.image_path, old.image_rotation
+                if old.xpointer then
+                    group.xpointer, group.xpointer_v2 = old.xpointer, old.xpointer_v2
+                end
+                kept[group.id] = group
+                if not group.image_path then
+                    self:scheduleGroupImageCapture(group)
+                end
+            end
+        end
+        -- A fresh id may equal a kept one (same second, same stroke index)
+        for _, group in ipairs(self.annotation_groups) do
+            if kept[group.id] and kept[group.id] ~= group then
+                self:cancelGroupImageCapture(group.id)
+                while kept[group.id] do group.id = group.id .. "b" end
+                self:scheduleGroupImageCapture(group)
+            end
         end
     end)
     if not ok then
