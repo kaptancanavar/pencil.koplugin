@@ -140,75 +140,90 @@ function Pencil:finishTextHighlight()
     self.pen_down = false
 end
 
--- Find the index in self.ui.annotation.annotations of a saved text highlight
--- whose rendered boxes cover screen position (screen_x, screen_y).
--- Returns nil if no highlight is at that position.
--- Used by the eraser path so flipping to the eraser end and swiping across a
--- highlight removes it, the same way it removes freehand strokes.
-function Pencil:findHighlightAtScreenPos(screen_x, screen_y)
+-- Screen boxes of the saved text highlights, collected ONCE per eraser
+-- gesture (finishErase / abortErase drop the cache). Looking them up on
+-- every pen event asked the document to measure every highlight of the
+-- book (EPUB: getScreenBoxesFromPositions per highlight) 100+ times a
+-- second, which is what made the eraser end crawl in books with highlights.
+-- Entries keep the annotation item itself: indices shift after a removal.
+function Pencil:getHighlightEraseBoxes()
+    if self._hl_boxes then return self._hl_boxes end
+    local list = {}
+    self._hl_boxes = list
     if not (self.ui and self.ui.annotation and self.ui.annotation.annotations
             and self.ui.view and self.ui.document) then
-        return nil
+        return list
     end
-
+    local doc, view = self.ui.document, self.ui.view
     local is_paging = self.ui.paging ~= nil
-    local page_pos
-    if is_paging then
-        page_pos = self.ui.view:screenToPageTransform({ x = screen_x, y = screen_y })
-        if not page_pos then return nil end
-    end
-
-    for index, item in ipairs(self.ui.annotation.annotations) do
+    local page = is_paging and self:getCurrentPage() or nil
+    for _, item in ipairs(self.ui.annotation.annotations) do
         -- drawer is nil for page-bookmarks; only text highlights have it set.
         if item.drawer and item.pos0 and item.pos1 then
             local boxes
             if is_paging then
-                if item.page == page_pos.page then
-                    local ok, got = pcall(self.ui.document.getPageBoxesFromPositions,
-                                          self.ui.document, page_pos.page, item.pos0, item.pos1)
-                    if ok then boxes = got end
-                end
-            else
-                -- Rolling mode (EPUB): work in screen coordinates directly.
-                local ok, got = pcall(self.ui.document.getScreenBoxesFromPositions,
-                                      self.ui.document, item.pos0, item.pos1, true)
-                if ok then boxes = got end
-            end
-            if boxes then
-                local px = is_paging and page_pos.x or screen_x
-                local py = is_paging and page_pos.y or screen_y
-                for _, box in ipairs(boxes) do
-                    if px >= box.x and px < box.x + box.w
-                            and py >= box.y and py < box.y + box.h then
-                        return index
+                if item.page == page and view.pageToScreenTransform then
+                    local ok, got = pcall(doc.getPageBoxesFromPositions, doc, page, item.pos0, item.pos1)
+                    if ok and got then
+                        boxes = {}
+                        for _, b in ipairs(got) do
+                            local ok2, sb = pcall(view.pageToScreenTransform, view, page, b)
+                            if ok2 and sb then boxes[#boxes + 1] = sb end
+                        end
                     end
                 end
+            else
+                -- Rolling mode (EPUB): screen coordinates directly
+                local ok, got = pcall(doc.getScreenBoxesFromPositions, doc, item.pos0, item.pos1, true)
+                if ok then boxes = got end
+            end
+            if boxes and #boxes > 0 then
+                list[#list + 1] = { item = item, boxes = boxes }
             end
         end
     end
-    return nil
+    return list
 end
 
--- Delete any KOReader text highlight at the given screen position.
--- Used by the eraser pass inside handleStylusSlot. removeItemByIndex emits
--- AnnotationsModified and does the logical cleanup, but on e-ink its
--- setDirty is not strong enough to clear the highlight's painted pixels
--- from the framebuffer — users saw the removed highlight linger until the
--- next page turn forced a full refresh. Force a UI-mode setDirty here so
--- the overlay actually disappears.
+local function circleHitsBox(cx, cy, r, b)
+    local nx = math.max(b.x, math.min(cx, b.x + b.w))
+    local ny = math.max(b.y, math.min(cy, b.y + b.h))
+    local dx, dy = nx - cx, ny - cy
+    return dx * dx + dy * dy <= r * r
+end
+
+-- Delete a KOReader text highlight touched by the eraser circle at the given
+-- screen position (the whole circle counts, like for strokes, not just the
+-- pen tip). Used by the eraser-end pass in dispatchStylusSlot.
+-- removeItemByIndex emits AnnotationsModified and does the logical cleanup,
+-- but on e-ink its setDirty is not strong enough to clear the highlight's
+-- painted pixels from the framebuffer, so a UI-mode setDirty is forced.
 function Pencil:eraseHighlightAtScreenPos(screen_x, screen_y)
-    local index = self:findHighlightAtScreenPos(screen_x, screen_y)
-    if not index then return false end
-    if not (self.ui and self.ui.bookmark and self.ui.bookmark.removeItemByIndex) then
-        return false
+    local list = self:getHighlightEraseBoxes()
+    if #list == 0 then return false end
+    local r = self:getEraserRadius()
+    for li, e in ipairs(list) do
+        for _, b in ipairs(e.boxes) do
+            if circleHitsBox(screen_x, screen_y, r, b) then
+                table.remove(list, li)
+                local index
+                for i, it in ipairs(self.ui.annotation.annotations) do
+                    if it == e.item then index = i break end
+                end
+                if not index or not (self.ui.bookmark and self.ui.bookmark.removeItemByIndex) then
+                    return false
+                end
+                local ok = pcall(self.ui.bookmark.removeItemByIndex, self.ui.bookmark, index)
+                if ok then
+                    -- The page itself changed: the eraser snapshot no longer matches
+                    self:freeEraseSnapshot()
+                    UIManager:setDirty(self.ui.dialog or self.ui.view, "ui")
+                end
+                return ok
+            end
+        end
     end
-    local ok = pcall(self.ui.bookmark.removeItemByIndex, self.ui.bookmark, index)
-    if ok then
-        -- The page itself changed: the eraser snapshot no longer matches
-        self:freeEraseSnapshot()
-        UIManager:setDirty(self.ui.dialog or self.ui.view, "ui")
-    end
-    return ok
+    return false
 end
 
 return Pencil

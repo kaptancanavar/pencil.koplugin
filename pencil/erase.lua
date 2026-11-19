@@ -236,6 +236,7 @@ end
 -- strokes already erased stay erased and get their undo entry; the screen is
 -- left to a normal repaint.
 function Pencil:abortErase()
+    self._hl_boxes = nil   -- highlight boxes belong to this gesture's page
     if self.erase_flush_scheduled then
         UIManager:unschedule(self.erase_flush_scheduled)
         self.erase_flush_scheduled = nil
@@ -265,6 +266,7 @@ end
 -- whole erased area (markers in real gray, one REAGL refresh if a marker was
 -- involved), free the snapshot, rebuild groups once.
 function Pencil:finishErase()
+    self._hl_boxes = nil   -- highlight boxes are collected anew per gesture
     self.erase_prev_x, self.erase_prev_y = nil, nil
     if self.erase_flush_scheduled then
         UIManager:unschedule(self.erase_flush_scheduled)
@@ -402,7 +404,13 @@ function Pencil:eraseAtPoint(x, y, page)
         for _, piece in ipairs(added_pieces) do
             table.insert(self.strokes, piece)
         end
+        -- The view didn't move and pieces carry current screen points, so the
+        -- projection of anchored strokes (scroll mode) is still valid. Keep
+        -- it: rebuildPageIndex resets it, and the next eraser sample would
+        -- reproject every stroke on screen, after every single hit.
+        local proj_sig = self._proj_sig
         self:rebuildPageIndex()
+        self._proj_sig = proj_sig
         -- Group rebuild re-syncs bookmarks and scans the image folder: far
         -- too slow to run on every eraser sample. Done once on eraser lift
         -- (finishErase); paintTo only needs the page index rebuilt above.
@@ -417,17 +425,16 @@ function Pencil:eraseAtPoint(x, y, page)
     return nil
 end
 
--- Split a stroke into the runs of points that lie outside the eraser circle.
--- Runs with fewer than 2 points are dropped. Returns new stroke tables that
--- copy every field of the original except points.
 -- Returns the pieces of `stroke` outside the eraser circle, and whether
--- anything was actually cut away. Points are densified first, so a segment
--- crossing the circle is cut even when its endpoints both lie outside it.
+-- anything was actually cut away. Pieces are new stroke tables that copy
+-- every field of the original except points; runs under 2 points are dropped.
+-- Each segment is cut exactly where it crosses the circle (also when it
+-- passes through with both ends outside). This used to densify the stroke
+-- to points radius/3 apart and drop those inside, so the gap came out up to
+-- that step (~10 px) wider than the eraser on each side.
 function Pencil:splitStrokeAtPoint(stroke, x, y, radius)
-    local r_sq = radius * radius
     local pieces = {}
     local run = {}
-    local cut = false
     local function flush()
         if #run >= 2 then
             local piece = {}
@@ -444,25 +451,21 @@ function Pencil:splitStrokeAtPoint(stroke, x, y, radius)
         end
         run = {}
     end
-    local step = math.max(1, math.floor(radius / 3))
-    for _, pt in ipairs(PencilGeometry.densifyPoints(stroke.points or {}, step)) do
-        local dx, dy = pt.x - x, pt.y - y
-        if dx * dx + dy * dy <= r_sq then
-            cut = true
-            flush()
-        else
-            table.insert(run, pt)
-        end
+    local runs, cut = PencilGeometry.cutByCircle(stroke.points or {}, x, y, radius)
+    for _, r in ipairs(runs) do
+        run = r
+        flush()
     end
-    flush()
     return pieces, cut
 end
 
--- Eraser radius in screen pixels. The stored width (20) was in raw pixels,
--- which is only ~1.7 mm on the Scribe's 300 ppi panel; scale it like the
--- rest of the UI so the eraser is a usable size on high-DPI screens.
+-- Eraser radius in screen pixels. The stored width is scaled like the rest
+-- of the UI (raw 20 px is only ~1.7 mm on the Scribe's 300 ppi panel) and is
+-- the eraser's DIAMETER, the size the width menu shows. It used to be
+-- 0.8 x the scaled width as the radius: 1.6x the shown size, ~5 mm wide at
+-- "Mittel" on the Scribe, so it erased far beyond the pen tip.
 function Pencil:getEraserRadius()
-    return Screen:scaleBySize(self.tool_settings[TOOL_ERASER].width or 20) * 0.8
+    return Screen:scaleBySize(self.tool_settings[TOOL_ERASER].width or 20) / 2
 end
 
 -- Erase along the eraser's path from its previous sample to the current one,

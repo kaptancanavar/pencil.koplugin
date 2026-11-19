@@ -102,6 +102,77 @@ function Geometry.densifyPoints(points, step)
     return out
 end
 
+--- Cut a polyline by a circle. Returns the runs of the line outside the
+-- circle (lists of points, the cut ends placed exactly on the circle) and
+-- whether anything lay inside. Pressure (p) is interpolated at the cuts.
+function Geometry.cutByCircle(points, cx, cy, r)
+    local r2 = r * r
+    local runs, run = {}, {}
+    local cut = false
+    local function inside(p)
+        local dx, dy = p.x - cx, p.y - cy
+        return dx * dx + dy * dy <= r2
+    end
+    local function at(a, b, t)
+        local q = {
+            x = math.floor(a.x + (b.x - a.x) * t + 0.5),
+            y = math.floor(a.y + (b.y - a.y) * t + 0.5),
+        }
+        if a.p and b.p then
+            q.p = math.floor((a.p + (b.p - a.p) * t) * 100 + 0.5) / 100
+        end
+        return q
+    end
+    local function flush()
+        if #run > 0 then runs[#runs + 1] = run end
+        run = {}
+    end
+    -- Parameters t1 <= t2 where segment a->b meets the circle, or nil
+    local function crossings(a, b)
+        local dx, dy = b.x - a.x, b.y - a.y
+        local fx, fy = a.x - cx, a.y - cy
+        local A = dx * dx + dy * dy
+        if A == 0 then return nil end
+        local B = 2 * (fx * dx + fy * dy)
+        local C = fx * fx + fy * fy - r2
+        local disc = B * B - 4 * A * C
+        if disc <= 0 then return nil end
+        local s = math.sqrt(disc)
+        return (-B - s) / (2 * A), (-B + s) / (2 * A)
+    end
+    local n = #points
+    if n == 0 then return runs, false end
+    local prev = points[1]
+    local prev_in = inside(prev)
+    if prev_in then cut = true else run[1] = prev end
+    for i = 2, n do
+        local p = points[i]
+        local p_in = inside(p)
+        if not prev_in and not p_in then
+            local t1, t2 = crossings(prev, p)
+            if t1 and t1 > 0 and t2 < 1 then
+                -- passes through the circle: cut out the chord
+                run[#run + 1] = at(prev, p, t1)
+                flush()
+                cut = true
+                run[1] = at(prev, p, t2)
+            end
+            run[#run + 1] = p
+        elseif not prev_in and p_in then
+            local t1 = crossings(prev, p)
+            run[#run + 1] = at(prev, p, math.max(0, math.min(1, t1 or 1)))
+            flush()
+            cut = true
+        elseif prev_in and not p_in then
+            local _, t2 = crossings(prev, p)
+            run = { at(prev, p, math.max(0, math.min(1, t2 or 0))), p }
+        end
+        prev, prev_in = p, p_in
+    end
+    flush()
+    return runs, cut
+end
+
 -- Rotation mode constants (matches KOReader's framebuffer constants)
 Geometry.ROTATION_UPRIGHT = 0
 Geometry.ROTATION_CLOCKWISE = 1
