@@ -50,12 +50,16 @@ function Pencil:paintNotes(bb, page)
     if not self.notes or #self.notes == 0 or not self.toolbar then return end
     for _, n in ipairs(self.notes) do
         if self:noteVisible(n, page) then
+            -- Just the icon, no frame: looks smaller on the page. The white
+            -- underlay is only as big as the icon so text doesn't show
+            -- through it. The tap area (getNoteRect) stays as large as before.
             local r = self:getNoteRect(n)
-            bb:paintRoundedRect(r.x, r.y, r.w, r.h, Blitbuffer.COLOR_WHITE, Screen:scaleBySize(5))
-            bb:paintBorder(r.x, r.y, r.w, r.h, math.max(1, Screen:scaleBySize(1.5)), Blitbuffer.COLOR_BLACK, Screen:scaleBySize(5))
             local icon = self.toolbar:getIcon("note")
             local is = self.toolbar.icon_size
-            icon:paintTo(bb, r.x + math.floor((r.w - is) / 2), r.y + math.floor((r.h - is) / 2))
+            local ix = r.x + math.floor((r.w - is) / 2)
+            local iy = r.y + math.floor((r.h - is) / 2)
+            bb:paintRect(ix, iy, is, is, Blitbuffer.COLOR_WHITE)
+            icon:paintTo(bb, ix, iy)
         end
     end
 end
