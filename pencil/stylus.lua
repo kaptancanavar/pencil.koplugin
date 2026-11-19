@@ -254,6 +254,12 @@ function Pencil:dispatchStylusSlot(input, slot)
             tostring(self.eraser_button_active)))
     end
 
+    -- Handwritten sticky note open: the pen writes on its pad (or taps its
+    -- buttons). Checked before the overlay test, which would pass it on.
+    if self.note_pad then
+        return self.note_pad:handleStylusSlot(slot)
+    end
+
     -- Don't capture pen input when a menu or overlay is on top of the reader.
     -- But a lift still has to end whatever we were tracking: an overlay that
     -- opens mid-contact (e.g. the "cleared" message after "Seite löschen")

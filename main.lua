@@ -124,6 +124,7 @@ for _, name in ipairs({
     "toolbar_control",
     "lasso",
     "notes",
+    "notepad",
     "storage",
 }) do
     for k, v in pairs(require("pencil/" .. name)) do
@@ -336,6 +337,9 @@ end
 -- Handle document close
 function Pencil:onCloseDocument()
     logger.info("Pencil: onCloseDocument called, strokes count =", #self.strokes)
+    if self.note_pad then
+        pcall(self.note_pad.finish, self.note_pad, "save")   -- saved below
+    end
     self:resetTransientInput(true)   -- in-progress stroke is saved below
     self:cancelAutosave()
     self:freeEraseSnapshot()

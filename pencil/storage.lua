@@ -108,7 +108,9 @@ function Pencil:loadStrokes()
         self.notes = {}
         for _, n in ipairs(type(data.notes) == "table" and data.notes or {}) do
             if type(n) == "table" and type(n.x) == "number" and type(n.y) == "number"
-                    and n.page ~= nil and type(n.text) == "string" then
+                    and n.page ~= nil
+                    and (type(n.text) == "string"
+                         or (type(n.ink) == "table" and type(n.ink.strokes) == "table")) then
                 table.insert(self.notes, n)
             end
         end

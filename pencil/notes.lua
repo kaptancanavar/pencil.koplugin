@@ -89,9 +89,19 @@ function Pencil:leaveNoteMode()
     end
 end
 
+-- New notes and handwritten ones open the writing pad (pencil/notepad.lua).
+-- Notes typed before handwriting existed keep their keyboard dialog.
 function Pencil:openNoteDialog(index, x, y)
     local note = index and self.notes[index]
-    local page = self:getCurrentPage()
+    if not (note and note.text and not note.ink) then
+        return self:openInkNote(index, x, y)
+    end
+    return self:openTextNoteDialog(index)
+end
+
+function Pencil:openTextNoteDialog(index)
+    local note = index and self.notes[index]
+    if not note then return end
     local dialog
     local function done()
         UIManager:close(dialog)
@@ -99,18 +109,16 @@ function Pencil:openNoteDialog(index, x, y)
         UIManager:setDirty(self.ui.dialog or self.ui, "ui")
     end
     local row = {}
-    if note then
-        table.insert(row, {
-            text = "Löschen",
-            callback = function()
-                for i, n in ipairs(self.notes) do
-                    if n == note then table.remove(self.notes, i) break end
-                end
-                self:scheduleDeferredWork()
-                done()
-            end,
-        })
-    end
+    table.insert(row, {
+        text = "Löschen",
+        callback = function()
+            for i, n in ipairs(self.notes) do
+                if n == note then table.remove(self.notes, i) break end
+            end
+            self:scheduleDeferredWork()
+            done()
+        end,
+    })
     table.insert(row, {
         text = "Abbrechen",
         id = "close",
@@ -121,27 +129,20 @@ function Pencil:openNoteDialog(index, x, y)
         is_enter_default = true,
         callback = function()
             local text = dialog:getInputText() or ""
-            if note then
-                if text == "" then
-                    for i, n in ipairs(self.notes) do
-                        if n == note then table.remove(self.notes, i) break end
-                    end
-                else
-                    note.text = text
+            if text == "" then
+                for i, n in ipairs(self.notes) do
+                    if n == note then table.remove(self.notes, i) break end
                 end
-                self:scheduleDeferredWork()
-            elseif text ~= "" then
-                local n = { page = page, vkey = self:getViewKey(), x = x, y = y, text = text, datetime = os.time() }
-                if self:isScrollMode() then self:anchorNote(n) end
-                table.insert(self.notes, n)
-                self:scheduleDeferredWork()
+            else
+                note.text = text
             end
+            self:scheduleDeferredWork()
             done()
         end,
     })
     dialog = InputDialog:new{
-        title = note and "Notiz" or "Neue Notiz",
-        input = note and note.text or "",
+        title = "Notiz",
+        input = note.text,
         allow_newline = true,
         buttons = { row },
     }

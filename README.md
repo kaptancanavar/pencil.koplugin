@@ -8,7 +8,7 @@ Ein KOReader-Plugin, mit dem du mit dem Stift direkt in deine Bücher und PDFs s
 - **Textmarker**: breit und halbtransparent
 - **Radierer**: radiert nur das weg, was unter dem Radierer liegt, oder auf Wunsch den ganzen Strich
 - **Lasso**: Striche einkreisen und dann verschieben oder löschen
-- **Notizzettel**: auf die Seite tippen und eine Textnotiz anheften
+- **Haftnotizen**: auf die Seite tippen, dann öffnet sich ein Notizfeld, in das du mit dem Stift schreibst (wie beim Kindle Scribe). Radieren geht mit dem Radiergummi-Ende oder der Seitentaste, Tippen außerhalb speichert.
 - **Rückgängig / Wiederholen**
 - **Schwebende Werkzeugleiste**: lässt sich verschieben und einklappen
 - **Pointer-Modus**: der Stift verhält sich wie ein Finger, z. B. zum Umblättern oder für Menüs
