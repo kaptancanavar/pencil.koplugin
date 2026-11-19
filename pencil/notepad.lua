@@ -421,6 +421,7 @@ function Pencil:openInkNote(index, x, y)
             self:scheduleDeferredWork()
         end,
         on_close = function()
+            self:resetPenStateAfterNote()
             self:leaveNoteMode()
             UIManager:setDirty(self.ui.dialog or self.ui, "ui")
         end,

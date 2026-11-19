@@ -86,6 +86,22 @@ function Pencil:handleNoteSlot(slot)
     return true
 end
 
+-- While a note is open, key events (side button, eraser end) go to the note,
+-- not to us, so their release can be missed. Start clean afterwards: a stale
+-- "side button held" turned every stroke into highlighter, a stale text
+-- selection kept the pen marking text instead of writing.
+function Pencil:resetPenStateAfterNote()
+    self.side_button_down = false
+    self.side_button_used_for_highlight = false
+    self.eraser_tool_active = false
+    if self.highlighting then
+        pcall(self._clearTempSelection, self)
+        self.highlighting = false
+    end
+    pcall(self.resetTransientInput, self)
+    self.eraser_button_active = false
+end
+
 -- After a note dialog in note mode, the pen returns to its previous tool
 function Pencil:leaveNoteMode()
     if self.current_tool == TOOL_NOTE then
@@ -109,6 +125,7 @@ function Pencil:openTextNoteDialog(index)
     local dialog
     local function done()
         UIManager:close(dialog)
+        self:resetPenStateAfterNote()
         self:leaveNoteMode()
         UIManager:setDirty(self.ui.dialog or self.ui, "ui")
     end

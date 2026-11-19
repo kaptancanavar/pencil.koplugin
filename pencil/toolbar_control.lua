@@ -223,6 +223,9 @@ function Pencil:selectTool(tool)
         self.toolbar.flyout = nil
         self.pointer_mode = false
         self.textmark_mode = false
+        -- Picking a tool means the pen draws with THAT tool: a stale "side
+        -- button held" (release missed) must not keep overriding it
+        self.side_button_down = false
         if tool == TOOL_NOTE and self.current_tool ~= TOOL_NOTE then
             -- After placing a note, the pen goes back to what it was
             self.tool_before_note = self.current_tool

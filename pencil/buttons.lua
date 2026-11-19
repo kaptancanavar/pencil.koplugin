@@ -39,10 +39,12 @@ end
 
 -- Handle stylus button release (up event)
 function Pencil:onStylusButtonRelease()
-    if not self:isEnabled() or self:isOverlayActive() then return false end
-
+    -- Clear the held state FIRST, whatever is on screen: released while a
+    -- menu / sticky note was open, the flag used to stay set, and every
+    -- later stroke came out as highlighter (startRawStroke) until restart.
     local was_down = self.side_button_down
     self.side_button_down = false
+    if not self:isEnabled() or self:isOverlayActive() then return false end
 
     -- If the button was NOT used for highlighting (no drawing while held),
     -- treat it as a quick press to toggle between pen and eraser
