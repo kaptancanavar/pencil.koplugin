@@ -41,9 +41,15 @@ function Pencil:loadSettings()
     self.toolbar_expanded = settings.toolbar_expanded ~= false
     self.toolbar_fx, self.toolbar_fy = settings.toolbar_fx, settings.toolbar_fy
     self.toolbar_transparent = settings.toolbar_transparent ~= false
-    self.side_button_tool = sideButtonToolName(settings.side_button_tool)
-        and settings.side_button_tool or SIDE_BUTTON_DEFAULT
-    self.tool_settings[TOOL_PEN].pen_type = settings.pen_type or PEN_TYPE_PEN
+    local sb = settings.side_button_tool
+    if type(sb) == "string" and sb:match("^pen:") then
+        sb = "pen:pen"   -- fountain pen / marker / pencil were removed: plain pen
+    end
+    self.side_button_tool = sideButtonToolName(sb) and sb or SIDE_BUTTON_DEFAULT
+    -- The pen is always a plain pen (the type choice was removed from the
+    -- toolbar); an old saved fountain/marker/pencil choice no longer applies.
+    -- Existing strokes keep their own type.
+    self.tool_settings[TOOL_PEN].pen_type = PEN_TYPE_PEN
     if settings.highlighter_width then
         self.tool_settings[TOOL_HIGHLIGHTER].width = settings.highlighter_width
     end

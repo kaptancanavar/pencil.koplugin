@@ -26,9 +26,6 @@ local MARKER_FACTOR = 2.5          -- marker line width relative to the pen widt
 local SIDE_BUTTON_TOOLS = {
     { id = "highlighter",  text = "Textmarker" },
     { id = "pen:pen",      text = "Stift" },
-    { id = "pen:fountain", text = "Füller" },
-    { id = "pen:marker",   text = "Marker" },
-    { id = "pen:pencil",   text = "Bleistift" },
     { id = "eraser",       text = "Radierer" },
     { id = "lasso",        text = "Lassoauswahl" },
     { id = "note",         text = "Haftnotiz" },

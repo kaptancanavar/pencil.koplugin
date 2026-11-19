@@ -17,10 +17,6 @@ local TOOL_HIGHLIGHTER = Common.TOOL_HIGHLIGHTER
 local TOOL_ERASER = Common.TOOL_ERASER
 local TOOL_LASSO = Common.TOOL_LASSO
 local TOOL_NOTE = Common.TOOL_NOTE
-local PEN_TYPE_PEN = Common.PEN_TYPE_PEN
-local PEN_TYPE_FOUNTAIN = Common.PEN_TYPE_FOUNTAIN
-local PEN_TYPE_PENCIL = Common.PEN_TYPE_PENCIL
-local PEN_TYPE_MARKER = Common.PEN_TYPE_MARKER
 local SIDE_BUTTON_TOOLS = Common.SIDE_BUTTON_TOOLS
 local SIDE_BUTTON_DEFAULT = Common.SIDE_BUTTON_DEFAULT
 local sideButtonToolName = Common.sideButtonToolName
@@ -115,33 +111,21 @@ end
 -- Rows for the toolbar flyouts (see lib/toolbar.lua getFlyout)
 function Pencil:getFlyoutRows(kind)
     local rows = {}
-    if kind == TOOL_PEN then
-        local current_type = self.tool_settings[TOOL_PEN].pen_type or PEN_TYPE_PEN
-        for _, t in ipairs({
-            { PEN_TYPE_PEN, "Stift" },
-            { PEN_TYPE_FOUNTAIN, "Füller" },
-            { PEN_TYPE_MARKER, "Marker" },
-            { PEN_TYPE_PENCIL, "Bleistift" },
-        }) do
-            table.insert(rows, { id = "pt:" .. t[1], text = t[2], selected = (current_type == t[1]) })
-        end
-        local level = self:getWidthLevel(TOOL_PEN)
-        local items = {}
-        for i, w in ipairs(TOOL_WIDTHS[TOOL_PEN]) do
-            table.insert(items, {
-                id = "w:" .. TOOL_PEN .. ":" .. i,
-                sample = { type = "line", width = w },
-                selected = (i == level),
-            })
-        end
-        table.insert(rows, { kind = "strip", items = items })
-    elseif kind == TOOL_HIGHLIGHTER or kind == TOOL_ERASER then
+    if kind == TOOL_PEN or kind == TOOL_HIGHLIGHTER or kind == TOOL_ERASER then
+        -- Only the stroke width, the same list for every tool. (The pen
+        -- used to offer fountain pen / marker / pencil here too; the pen is
+        -- just a pen now.)
         local level = self:getWidthLevel(kind)
+        local sample_type = (kind == TOOL_PEN and "line") or (kind == TOOL_ERASER and "ring") or "bar"
         for i, w in ipairs(TOOL_WIDTHS[kind]) do
             table.insert(rows, {
                 id = "w:" .. kind .. ":" .. i,
                 text = WIDTH_LABELS[i],
-                sample = { type = (kind == TOOL_ERASER) and "ring" or "bar", width = w },
+                -- Pen and marker draw in raw pixels; the eraser's size is
+                -- scaled (getEraserRadius), so its sample is too: the menu
+                -- shows the real eraser size.
+                sample = { type = sample_type,
+                           width = (kind == TOOL_ERASER) and Screen:scaleBySize(w) or w },
                 selected = (i == level),
             })
         end
@@ -250,12 +234,7 @@ end
 
 function Pencil:onFlyoutAction(rid)
     local tool, level = rid:match("^w:(%a+):(%d)$")
-    local pen_type = rid:match("^pt:(%a+)$")
-    if pen_type then
-        self.tool_settings[TOOL_PEN].pen_type = pen_type
-        self:saveSettings()
-        self:closeFlyout()
-    elseif tool then
+    if tool then
         self:setWidthLevel(tool, tonumber(level))
         self:closeFlyout()
     elseif rid == "clear_page" then
